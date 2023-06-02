@@ -1,0 +1,264 @@
+-- Data wrangling
+SELECT *
+  FROM tutorial.sf_crime_incidents_2014_01;
+
+-- Write a query that selects all Warrant Arrests from the tutorial.sf_crime_incidents_2014_01 dataset, 
+-- then wrap it in an outer query that only displays unresolved incidents.
+SELECT * FROM
+(SELECT * FROM
+  tutorial.sf_crime_incidents_2014_01
+  WHERE descript = 'WARRANT ARREST') sub
+  WHERE sub.resolution = 'NONE';
+  
+SELECT LEFT(sub.date, 2) AS cleaned_month,
+       sub.day_of_week,
+       AVG(sub.incidents) AS average_incidents
+  FROM (
+        SELECT day_of_week,
+               date,
+               COUNT(incidnt_num) AS incidents
+          FROM tutorial.sf_crime_incidents_2014_01
+         GROUP BY 1,2
+       ) sub
+ GROUP BY 1,2
+ ORDER BY 1,2;
+ 
+ -- Write a query that displays the average number of monthly incidents for each category. 
+ -- Hint: use tutorial.sf_crime_incidents_cleandate to make your life a little easier.
+ SELECT category,
+ AVG(sub.total_incidents) AS monthly_avg
+ FROM
+ (SELECT category, 
+ EXTRACT('month' FROM cleaned_date) AS MONTH, 
+ COUNT(incidnt_num) AS total_incidents
+ FROM
+ tutorial.sf_crime_incidents_cleandate
+ GROUP BY 1,2
+ ORDER BY 1,2) sub
+ GROUP BY sub.category;
+ 
+-- Using subqueries with conditions
+SELECT *
+  FROM tutorial.sf_crime_incidents_2014_01
+ WHERE Date = (SELECT MIN(date)
+                 FROM tutorial.sf_crime_incidents_2014_01
+              );
+              
+SELECT *
+  FROM tutorial.sf_crime_incidents_2014_01
+ WHERE Date IN (SELECT date
+                 FROM tutorial.sf_crime_incidents_2014_01
+                ORDER BY date
+                LIMIT 5
+              );
+              
+-- Using subqueries with JOIN
+SELECT *
+  FROM tutorial.sf_crime_incidents_2014_01 incidents
+  JOIN ( SELECT date
+           FROM tutorial.sf_crime_incidents_2014_01
+          ORDER BY date
+          LIMIT 5
+       ) sub
+    ON incidents.date = sub.date;
+    
+SELECT incidents.*,
+       sub.incidents AS incidents_that_day
+  FROM tutorial.sf_crime_incidents_2014_01 incidents
+  JOIN ( SELECT date,
+          COUNT(incidnt_num) AS incidents
+           FROM tutorial.sf_crime_incidents_2014_01
+          GROUP BY 1
+       ) sub
+    ON incidents.date = sub.date
+ ORDER BY sub.incidents DESC, time;
+ 
+ -- Write a query that displays all rows from the three categories with the fewest incidents reported.
+ SELECT *
+ FROM tutorial.sf_crime_incidents_2014_01
+ WHERE category IN
+ (SELECT category
+ FROM tutorial.sf_crime_incidents_2014_01
+ GROUP BY 1
+ ORDER BY COUNT(incidnt_num)
+ LIMIT 3);
+ 
+ SELECT incidents.*,
+       sub.count AS total_incidents_in_category
+  FROM tutorial.sf_crime_incidents_2014_01 incidents
+  JOIN (
+        SELECT category,
+               COUNT(*) AS count
+          FROM tutorial.sf_crime_incidents_2014_01
+         GROUP BY 1
+         ORDER BY 2
+         LIMIT 3
+       ) sub
+    ON sub.category = incidents.category;
+    
+--
+SELECT COALESCE(acquisitions.acquired_month, investments.funded_month) AS month,
+       COUNT(DISTINCT acquisitions.company_permalink) AS companies_acquired,
+       COUNT(DISTINCT investments.company_permalink) AS investments
+  FROM tutorial.crunchbase_acquisitions acquisitions
+  FULL JOIN tutorial.crunchbase_investments investments
+    ON acquisitions.acquired_month = investments.funded_month
+ GROUP BY 1;
+ 
+ --
+ SELECT COALESCE(acquisitions.month, investments.month) AS month,
+       acquisitions.companies_acquired,
+       investments.companies_rec_investment
+  FROM (
+        SELECT acquired_month AS month,
+               COUNT(DISTINCT company_permalink) AS companies_acquired
+          FROM tutorial.crunchbase_acquisitions
+         GROUP BY 1
+       ) acquisitions
+  FULL JOIN (
+        SELECT funded_month AS month,
+               COUNT(DISTINCT company_permalink) AS companies_rec_investment
+          FROM tutorial.crunchbase_investments
+         GROUP BY 1
+       )investments
+    ON acquisitions.month = investments.month
+ ORDER BY 1 DESC;
+ 
+ -- Write a query that counts the number of companies founded and acquired by quarter starting in Q1 2012. 
+ -- Create the aggregations in two separate queries, then join them.
+ SELECT COALESCE(funded.funded_quarter, acquisition.acquired_quarter) AS quarter, 
+        funded.companies_funded, 
+        acquisition.companies_acquired
+ FROM
+       (SELECT funded_quarter, COUNT(company_permalink) as companies_funded
+        FROM tutorial.crunchbase_investments
+        WHERE funded_quarter >= '2012'
+        GROUP BY 1) as funded
+ FULL JOIN
+       (SELECT acquired_quarter, COUNT(company_permalink) as companies_acquired
+        FROM tutorial.crunchbase_acquisitions
+        WHERE acquired_quarter >= '2012'
+        GROUP BY 1) acquisition
+ON funded.funded_quarter = acquisition.acquired_quarter
+ORDER BY 1;
+
+-- Subqueries and Unions
+SELECT *
+  FROM tutorial.crunchbase_investments_part1
+ UNION ALL
+ SELECT *
+   FROM tutorial.crunchbase_investments_part2;
+   
+SELECT COUNT(*) AS total_rows
+  FROM (
+        SELECT *
+          FROM tutorial.crunchbase_investments_part1
+         UNION ALL
+        SELECT *
+          FROM tutorial.crunchbase_investments_part2
+       ) sub;
+       
+-- Write a query that ranks investors from the combined dataset above by the total number of investments 
+-- they have made.
+SELECT investors.investor_permalink, 
+       investors.investor_name,
+        COUNT(company_permalink) AS number_of_investments
+FROM
+     (SELECT *
+      FROM tutorial.crunchbase_investments_part1
+      UNION ALL
+      SELECT *
+      FROM tutorial.crunchbase_investments_part2) investors
+GROUP BY 1,2
+ORDER BY 3 DESC;
+
+-- Write a query that does the same thing as in the previous problem, except only for companies 
+--that are still operating. 
+-- Hint: operating status is in tutorial.crunchbase_companies.
+SELECT permalink
+FROM tutorial.crunchbase_companies 
+WHERE status = 'operating';
+
+SELECT investors.investor_permalink, 
+       investors.investor_name,
+        COUNT(company_permalink) AS number_of_investments
+FROM
+     (SELECT *
+      FROM tutorial.crunchbase_investments_part1
+      UNION ALL
+      SELECT *
+      FROM tutorial.crunchbase_investments_part2) investors
+      INNER JOIN
+      (SELECT permalink
+      FROM tutorial.crunchbase_companies 
+      WHERE status = 'operating') companies
+      ON investors.investor_permalink = companies.permalink
+GROUP BY 1,2
+ORDER BY 3 DESC;
+
+-- Windows Functions
+
+SELECT *
+  FROM tutorial.dc_bikeshare_q1_2012;
+
+SELECT start_time, SUM(duration_seconds)
+  FROM tutorial.dc_bikeshare_q1_2012
+GROUP BY 1
+ORDER BY 1;
+---
+SELECT start_time,
+       duration_seconds,
+       SUM(duration_seconds) OVER (ORDER BY start_time) AS running_total
+  FROM tutorial.dc_bikeshare_q1_2012;
+--- PARTITION BY
+SELECT start_time,
+       start_terminal,
+       duration_seconds,
+       SUM(duration_seconds) OVER
+         (PARTITION BY start_terminal ORDER BY start_time)
+         AS running_total
+  FROM tutorial.dc_bikeshare_q1_2012
+ WHERE start_time < '2012-01-08';
+
+SELECT start_terminal,
+       duration_seconds,
+       SUM(duration_seconds) OVER
+         (PARTITION BY start_terminal) AS start_terminal_total
+  FROM tutorial.dc_bikeshare_q1_2012
+ WHERE start_time < '2012-01-08';
+ 
+ SELECT DISTINCT start_terminal,
+       SUM(duration_seconds) OVER
+         (PARTITION BY start_terminal) AS start_terminal_total
+  FROM tutorial.dc_bikeshare_q1_2012
+ WHERE start_time < '2012-01-08'
+ ORDER BY 1;
+ 
+ SELECT start_terminal,
+        SUM(duration_seconds)  AS start_terminal_total
+  FROM tutorial.dc_bikeshare_q1_2012
+ WHERE start_time < '2012-01-08'
+ GROUP BY 1
+ ORDER BY 1;
+ 
+-- Write a query modification of the above example query that shows the duration of each ride as a 
+-- percentage of the total time accrued by riders from each start_terminal
+SELECT start_terminal,
+       duration_seconds,
+       SUM(duration_seconds) OVER (PARTITION BY start_terminal) AS start_terminal_sum,
+       (duration_seconds/SUM(duration_seconds) OVER (PARTITION BY start_terminal))*100 AS pct_of_total_time
+  FROM tutorial.dc_bikeshare_q1_2012
+ WHERE start_time < '2012-01-08'
+ ORDER BY 1, 4 DESC;
+ 
+ -- SUM, COUNT, AVERAGE
+ SELECT DISTINCT start_terminal,
+       SUM(duration_seconds) OVER
+         (PARTITION BY start_terminal) AS running_total,
+       COUNT(duration_seconds) OVER
+         (PARTITION BY start_terminal) AS running_count,
+       AVG(duration_seconds) OVER
+         (PARTITION BY start_terminal) AS running_avg
+  FROM tutorial.dc_bikeshare_q1_2012
+ WHERE start_time < '2012-01-08'
+ ORDER BY 1;

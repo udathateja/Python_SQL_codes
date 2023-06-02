@@ -1,0 +1,135 @@
+SELECT *
+FROM sqlchallenge1.region;
+--FROM sqlchallenge1.orders;
+--FROM sqlchallenge1.sales_reps;
+--FROM sqlchallenge1.accounts;
+  
+-- Basic chanllenge
+--query1
+SELECT name, website, LENGTH(website)
+FROM sqlchallenge1.accounts
+ORDER BY 3 DESC
+LIMIT 1;
+------------------------
+--query2
+SELECT COUNT(*)
+FROM sqlchallenge1.sales_reps
+WHERE name ILIKE '%e%';
+
+-------------------------
+--query3
+SELECT name
+FROM sqlchallenge1.accounts
+WHERE name ILIKE '%&%'
+ORDER BY 1
+LIMIT 1;
+
+-------------------------
+--query4
+SELECT sales_rep_id
+FROM sqlchallenge1.accounts
+WHERE id=
+(SELECT account_id
+FROM sqlchallenge1.orders
+WHERE EXTRACT('year' FROM occurred_at) = 2015
+AND EXTRACT('month' FROM occurred_at) = 05
+ORDER BY occurred_at DESC
+LIMIT 1);
+
+-------------------------
+--query5
+SELECT COUNT(*)
+FROM sqlchallenge1.sales_reps
+WHERE region_id = 
+(SELECT id
+FROM sqlchallenge1.region
+WHERE name = 'Northeast');
+
+-------------------------
+-- Intermediate 
+-- query 1
+SELECT region.name, sub.no_sales_rep
+FROM sqlchallenge1.region region
+LEFT JOIN
+        (SELECT salesrp.region_id, 
+                COUNT(accounts.sales_rep_id) as no_sales_rep
+         FROM sqlchallenge1.accounts accounts
+         LEFT JOIN 
+         sqlchallenge1.sales_reps salesrp
+         ON accounts.sales_rep_id = salesrp.id
+         GROUP BY 1) sub 
+ON region.id = sub.region_id
+ORDER BY 2
+LIMIT 1;
+
+-----------------------------------
+-- query 2
+SELECT sales_acc.name, SUM(orders.total)
+FROM
+     (SELECT acc.id, salesrp.name
+      FROM
+          (SELECT id, sales_rep_id
+           FROM sqlchallenge1.accounts) acc
+           RIGHT JOIN
+          (SELECT *
+           FROM sqlchallenge1.sales_reps 
+           WHERE name IN ('Tia Amato', 'Delilah Krum', 'Soraya Fulton')) salesrp
+           ON acc.sales_rep_id = salesrp.id) sales_acc
+      LEFT JOIN
+          (SELECT account_id, occurred_at, total
+           FROM sqlchallenge1.orders
+           WHERE EXTRACT('year' from occurred_at) = 2016
+           AND EXTRACT('month' from occurred_at) = 09) orders
+ON sales_acc.id = orders.account_id
+GROUP BY 1
+ORDER BY 2 DESC
+LIMIT 1;
+
+
+-----------------------------------
+-- query 3
+SELECT acc_sales.name
+FROM
+    (SELECT id as acc_id, name
+     FROM sqlchallenge1.accounts acc
+     WHERE acc.sales_rep_id IN
+             (SELECT id as sales_reps_id
+              FROM sqlchallenge1.sales_reps
+              WHERE region_id IN
+                       (SELECT id
+                       FROM sqlchallenge1.region
+                       WHERE name = 'Northeast'))) acc_sales 
+INNER JOIN
+    (SELECT account_id, SUM(poster_qty) as poster_sum
+     FROM sqlchallenge1.orders
+     GROUP BY 1) orders
+ON acc_sales.acc_id = orders.account_id
+AND orders.poster_sum = 0;
+
+
+--------------------------
+--query 4
+SELECT COUNT(*) 
+FROM
+    ((SELECT id 
+     FROM sqlchallenge1.accounts) accounts
+     FULL JOIN 
+     (SELECT account_id, SUM(poster_qty)
+      FROM sqlchallenge1.orders 
+      GROUP BY 1
+      ORDER BY 2) orders
+      ON orders.account_id = accounts.id
+     ) sub
+WHERE sum=0 OR SUM IS NULL;
+
+
+
+
+----------------
+--query 5
+SELECT 
+LEFT(primary_poc, STRPOS(primary_poc, ' ')) as first_name, COUNT(LEFT(primary_poc, STRPOS(primary_poc, ' '))) as count
+FROM sqlchallenge1.accounts
+GROUP BY 1
+ORDER BY 2 DESC
+LIMIT 1;
